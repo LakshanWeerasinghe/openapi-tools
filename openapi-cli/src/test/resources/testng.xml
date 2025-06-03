@@ -23,6 +23,7 @@ under the License.
 
     <test name="openapi-cli-test-suite" preserve-order="true" parallel="false">
         <classes>
+            <class name="io.ballerina.openapi.service.AddCommandTests"/>
             <class name="io.ballerina.openapi.cmd.OpenAPICmdTest"/>
             <class name="io.ballerina.openapi.cmd.BallerinaToOASTests"/>
             <class name="io.ballerina.openapi.cmd.BallerinaCodeGeneratorLicenseTests"/>
