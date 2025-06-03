@@ -36,5 +36,6 @@ module io.ballerina.openapi {
     requires swagger.parser.v3;
     requires org.apache.commons.lang3;
     exports io.ballerina.openapi.cmd;
+    exports io.ballerina.openapi.service;
 }
 
