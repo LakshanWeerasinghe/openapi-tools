@@ -14,6 +14,7 @@ import io.ballerina.toml.syntax.tree.DocumentNode;
 import io.ballerina.toml.syntax.tree.KeyValueNode;
 import io.ballerina.toml.syntax.tree.SyntaxKind;
 import io.ballerina.toml.syntax.tree.TableArrayNode;
+import io.ballerina.tools.text.LSPTextEdit;
 import io.ballerina.tools.text.LinePosition;
 import io.ballerina.tools.text.LineRange;
 import io.ballerina.tools.text.TextDocument;
@@ -48,7 +49,7 @@ public class SourceGenerator {
         this.projectPath = Path.of(projectPath);
     }
 
-    private boolean genBalTomlTableEntry(String module, Map<String, List<TextEdit>> textEditsMap) throws IOException {
+    private boolean genBalTomlTableEntry(String module, Map<String, List<LSPTextEdit>> textEditsMap) throws IOException {
         Path tomlPath = this.projectPath.resolve(BALLERINA_TOML);
         TextDocument configDocument = TextDocuments.from(Files.readString(tomlPath));
         io.ballerina.toml.syntax.tree.SyntaxTree syntaxTree = io.ballerina.toml.syntax.tree.SyntaxTree.from(configDocument);
@@ -76,15 +77,14 @@ public class SourceGenerator {
         }
 
         String tomlEntry = getTomlEntry(module);
-        List<TextEdit> textEdits = new ArrayList<>();
+        List<LSPTextEdit> textEdits = new ArrayList<>();
         textEditsMap.put(tomlPath.toString(), textEdits);
         if (lineRange != null) {
-            TextRange from = TextRange.from(lineRange.startLine().offset(), lineRange.endLine().offset());
-            textEdits.add(TextEdit.from(from, tomlEntry));
+            textEdits.add(LSPTextEdit.from(lineRange, tomlEntry));
         } else {
             LinePosition startPos = LinePosition.from(rootNode.lineRange().endLine().line() + 1, 0);
-            TextRange from = TextRange.from(0, 0);
-            textEdits.add(TextEdit.from(from, tomlEntry));
+            LineRange range = LineRange.from(tomlPath.toString(), startPos, startPos);
+            textEdits.add(LSPTextEdit.from(range, tomlEntry));
         }
         return lineRange != null;
     }
@@ -98,8 +98,8 @@ public class SourceGenerator {
                 contractPath.toAbsolutePath().toString().replace("\\", "\\\\") + "\"" + LS;
     }
 
-    public Map<String, List<TextEdit>> generate() throws IOException, BallerinaOpenApiException, Exception {
-        Map<String, List<TextEdit>> textEditsMap = new HashMap<>();
+    public Map<String, List<LSPTextEdit>> generate() throws IOException, BallerinaOpenApiException, Exception {
+        Map<String, List<LSPTextEdit>> textEditsMap = new HashMap<>();
         genBalTomlTableEntry("", textEditsMap);
         OpenAPI openAPI = GeneratorUtils.normalizeOpenAPI(this.contractPath, false,
                 true, true);
@@ -126,8 +126,9 @@ public class SourceGenerator {
         List<GenSrcFile> sourceFiles = generateSourceFiles(licenceHeader, balClientGenerator);
         Path outputPath = this.projectPath.resolve("generated").resolve("weather");
         for (GenSrcFile sourceFile : sourceFiles) {
-            List<TextEdit> textEdits = new ArrayList<>();
-            textEdits.add(TextEdit.from(TextRange.from(0, 0), sourceFile.getContent()));
+            List<LSPTextEdit> textEdits = new ArrayList<>();
+            LinePosition position = LinePosition.from(0, 0);
+            textEdits.add(LSPTextEdit.from(LineRange.from("", position, position), sourceFile.getContent()));
             textEditsMap.put(outputPath.resolve(sourceFile.getFileName()).toString(), textEdits);
         }
 

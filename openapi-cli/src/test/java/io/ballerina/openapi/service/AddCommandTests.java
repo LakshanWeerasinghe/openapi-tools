@@ -1,8 +1,8 @@
 package io.ballerina.openapi.service;
 
 import io.ballerina.cli.service.CliToolService;
+import io.ballerina.cli.service.ToolName;
 import io.ballerina.cli.service.types.CommandResponse;
-import io.ballerina.cli.service.types.Context;
 import io.ballerina.cli.service.types.ResultType;
 import io.ballerina.cli.service.types.Status;
 import org.testng.Assert;
@@ -31,26 +31,23 @@ public class AddCommandTests {
         List<String> arguments = List.of(openApiContractPath.toString());
         Map<String, Object> context = Map.of("projectPath", projectPath.toString());
 
-
-        Context ctx = new Context() {
-            @Override
-            public Map<String, Object> contextMap() {
-                return context;
-            }
-
-            @Override
-            public String requiredKeys() {
-                return "projectPath";
-            }
-        };
-
         ServiceLoader<CliToolService> services = ServiceLoader.load(CliToolService.class,
                 Thread.currentThread().getContextClassLoader());
         for (CliToolService service : services) {
-            CommandResponse commandResponse = service.executeCommand(command, arguments.toArray(new String[0]), ctx);
+            if (!isOpenApiToolService(service)) {
+                continue;
+            }
+            CommandResponse commandResponse = service.executeCommand(command, arguments.toArray(new String[0]), context);
             Assert.assertEquals(Status.SUCCESS, commandResponse.status());
             Assert.assertTrue(commandResponse.resultTypes().contains(ResultType.TEXT_EDIT));
             Assert.assertEquals(commandResponse.textEdits().size(), 4);
+            return;
         }
+        Assert.fail("OpenAPI tool service not found");
+    }
+
+    private static boolean isOpenApiToolService(CliToolService service) {
+        return service.getClass().getAnnotation(ToolName.class) != null &&
+                service.getClass().getAnnotation(ToolName.class).value().equals("openapi");
     }
 }
