@@ -28,8 +28,10 @@ public class AddCommandTests {
         Path openApiContractPath = RES_DIR.resolve("petstore.yaml").toAbsolutePath();
 
         String command = "add";
-        List<String> arguments = List.of(openApiContractPath.toString());
         Map<String, Object> context = Map.of("projectPath", projectPath.toString());
+
+        List<String> arguments = List.of("-i", openApiContractPath.toString(),
+                "--id", "petstore", "--module", "petstore");
 
         ServiceLoader<CliToolService> services = ServiceLoader.load(CliToolService.class,
                 Thread.currentThread().getContextClassLoader());

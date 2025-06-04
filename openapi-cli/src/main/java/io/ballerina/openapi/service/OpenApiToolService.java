@@ -22,9 +22,8 @@ public class OpenApiToolService implements CliToolService {
                     .errors(List.of(new Error("invalid command: " + command)))
                     .build();
         }
-
-        SourceGenerator sourceGenerator = new SourceGenerator(arguments[0], context.get("projectPath").toString());
         try {
+            SourceGenerator sourceGenerator = new SourceGenerator(arguments, context.get("projectPath").toString());
             Map<String, List<LSPTextEdit>> generate = sourceGenerator.generate();
             return builder.status(Status.SUCCESS)
                     .resultTypes(List.of(ResultType.TEXT_EDIT))

@@ -6,7 +6,6 @@ import io.ballerina.openapi.core.generators.client.BallerinaClientGenerator;
 import io.ballerina.openapi.core.generators.client.model.OASClientConfig;
 import io.ballerina.openapi.core.generators.common.GeneratorUtils;
 import io.ballerina.openapi.core.generators.common.TypeHandler;
-import io.ballerina.openapi.core.generators.common.exception.BallerinaOpenApiException;
 import io.ballerina.openapi.core.generators.common.model.Filter;
 import io.ballerina.openapi.core.generators.common.model.GenSrcFile;
 import io.ballerina.toml.syntax.tree.DocumentMemberDeclarationNode;
@@ -19,8 +18,6 @@ import io.ballerina.tools.text.LinePosition;
 import io.ballerina.tools.text.LineRange;
 import io.ballerina.tools.text.TextDocument;
 import io.ballerina.tools.text.TextDocuments;
-import io.ballerina.tools.text.TextEdit;
-import io.ballerina.tools.text.TextRange;
 import io.swagger.v3.oas.models.OpenAPI;
 import org.ballerinalang.formatter.core.Formatter;
 
@@ -28,9 +25,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 
 public class SourceGenerator {
@@ -41,18 +40,56 @@ public class SourceGenerator {
     private static final String BALLERINA_TOML = "Ballerina.toml";
     private static final String LS = System.lineSeparator();
 
-    private Path contractPath;
-    private Path projectPath;
+    // keys for the toml table
+    public static final String KEY_INPUT = "filePath";
+    public static final String KEY_ID = "id";
+    public static final String KEY_TARGET_MODULE = "targetModule";
+    public static final String OPTION_MODE = "option.mode";
+    public static final String OPTION_STATUS_CODE_BINDING = "option.statusCodeBinding";
+    public static final String OPTION_TAGS = "option.tags";
+    public static final String OPTION_NULLABLE = "option.nullable";
+    public static final String OPTION_LICENSE = "option.license";
+    public static final String OPTION_OPERATIONS = "option.operations";
 
-    public SourceGenerator(String contractPath, String projectPath) {
-        this.contractPath = Path.of(contractPath);
+    private final Path projectPath;
+    private final Map<String, String> arguments;
+
+    public SourceGenerator(String[] arguments, String projectPath) throws Exception {
+        this.arguments = argumentsParser(new ArrayList<>(Arrays.stream(arguments).toList()));
         this.projectPath = Path.of(projectPath);
+        this.validateArguments();
     }
 
-    private boolean genBalTomlTableEntry(String module, Map<String, List<LSPTextEdit>> textEditsMap) throws IOException {
+    private static Map<String, String> argumentsParser(List<String> arguments) {
+        Map<String, String> argsMap = new HashMap<>();
+        while (!arguments.isEmpty()) {
+            String option = arguments.removeFirst();
+            try {
+                switch (option) {
+                    case "-i", "--input" -> argsMap.put(KEY_INPUT, arguments.removeFirst());
+                    case "--id" -> argsMap.put(KEY_ID, arguments.removeFirst());
+                    case "--module" -> argsMap.put(KEY_TARGET_MODULE, arguments.removeFirst());
+                    case "--mode" -> argsMap.put(OPTION_MODE, arguments.removeFirst());
+                    case "--status-code-binding" -> argsMap.put(OPTION_STATUS_CODE_BINDING, "true");
+                    case "--tags" -> argsMap.put(OPTION_TAGS, arguments.removeFirst());
+                    case "-n", "--nullable" -> argsMap.put(OPTION_NULLABLE, "true");
+                    case "--license" -> argsMap.put(OPTION_LICENSE, arguments.removeFirst());
+                    case "--operations" -> argsMap.put(OPTION_OPERATIONS, arguments.removeFirst());
+                    default -> throw new IllegalArgumentException("Unknown option: " + option);
+                }
+            } catch (NoSuchElementException e) {
+                throw new IllegalArgumentException("Missing value for option: " + option, e);
+            }
+        }
+        return argsMap;
+    }
+
+    private void genBalTomlTableEntry(Map<String, List<LSPTextEdit>> textEditsMap)
+            throws IOException {
         Path tomlPath = this.projectPath.resolve(BALLERINA_TOML);
-        TextDocument configDocument = TextDocuments.from(Files.readString(tomlPath));
-        io.ballerina.toml.syntax.tree.SyntaxTree syntaxTree = io.ballerina.toml.syntax.tree.SyntaxTree.from(configDocument);
+        TextDocument balTomlDocument = TextDocuments.from(Files.readString(tomlPath));
+        io.ballerina.toml.syntax.tree.SyntaxTree syntaxTree = io.ballerina.toml.syntax.tree.SyntaxTree
+                .from(balTomlDocument);
         DocumentNode rootNode = syntaxTree.rootNode();
 
         LineRange lineRange = null;
@@ -68,7 +105,7 @@ public class SourceGenerator {
             for (KeyValueNode field : tableArrayNode.fields()) {
                 String identifier = field.identifier().toSourceCode();
                 if (identifier.trim().equals("targetModule")) {
-                    if (field.value().toSourceCode().contains("\"" + module + "\"")) {
+                    if (field.value().toSourceCode().contains(warpWithQuotes(this.arguments.get(KEY_TARGET_MODULE)))) {
                         lineRange = tableArrayNode.lineRange();
                         break;
                     }
@@ -76,63 +113,104 @@ public class SourceGenerator {
             }
         }
 
-        String tomlEntry = getTomlEntry(module);
+        String tomlEntry = balTomlEntry();
         List<LSPTextEdit> textEdits = new ArrayList<>();
         textEditsMap.put(tomlPath.toString(), textEdits);
         if (lineRange != null) {
             textEdits.add(LSPTextEdit.from(lineRange, tomlEntry));
         } else {
-            LinePosition startPos = LinePosition.from(rootNode.lineRange().endLine().line() + 1, 0);
+            LinePosition startPos = LinePosition.from(rootNode.lineRange().endLine().line() + 2, 0);
             LineRange range = LineRange.from(tomlPath.toString(), startPos, startPos);
             textEdits.add(LSPTextEdit.from(range, tomlEntry));
         }
-        return lineRange != null;
     }
 
-    private String getTomlEntry(String module) {
-        String moduleWithQuotes = "\"" + module + "\"";
-        return LS + "[[tool.openapi]]" + LS +
-                "id" + " = " + moduleWithQuotes + LS +
-                "targetModule" + " = " + moduleWithQuotes + LS +
-                "filePath" + " = " + "\"" +
-                contractPath.toAbsolutePath().toString().replace("\\", "\\\\") + "\"" + LS;
-    }
+    private String balTomlEntry() {
+        StringBuilder entry = new StringBuilder(LS + "[[tool.openapi]]" + LS +
+                "%s = %s%s".formatted(KEY_ID, warpWithQuotes(arguments.get(KEY_ID)), LS) +
+                "%s = %s%s".formatted(KEY_TARGET_MODULE, warpWithQuotes(arguments.get(KEY_TARGET_MODULE)), LS) +
+                "%s = %s%s".formatted(KEY_INPUT, warpWithQuotes(arguments.get(KEY_INPUT)), LS));
 
-    public Map<String, List<LSPTextEdit>> generate() throws IOException, BallerinaOpenApiException, Exception {
-        Map<String, List<LSPTextEdit>> textEditsMap = new HashMap<>();
-        genBalTomlTableEntry("", textEditsMap);
-        OpenAPI openAPI = GeneratorUtils.normalizeOpenAPI(this.contractPath, false,
-                true, true);
-        if (Objects.isNull(openAPI.getInfo())) {
-            throw new Exception("Info section is missing in the OpenAPI contract: " + this.contractPath);
+        for (Map.Entry<String, String> entryArg : arguments.entrySet()) {
+            if (entryArg.getKey().equals(KEY_INPUT) || entryArg.getKey().equals(KEY_TARGET_MODULE) ||
+                    entryArg.getKey().equals(KEY_ID)) {
+                continue;
+            }
+            String key = entryArg.getKey();
+            String value = entryArg.getValue();
+            switch (key) {
+                case OPTION_MODE, OPTION_LICENSE -> {
+                    if (value != null && !value.isBlank()) {
+                        entry.append("%s = %s%s".formatted(key, warpWithQuotes(value), LS));
+                    }
+                }
+                case OPTION_STATUS_CODE_BINDING, OPTION_NULLABLE -> {
+                    if (value != null && value.equals("true")) {
+                        entry.append("%s = true%s".formatted(key, LS));
+                    }
+                }
+                case OPTION_TAGS, OPTION_OPERATIONS -> {
+                    if (value != null && !value.isBlank()) {
+                        entry.append("%s = %s%s".formatted(key, value, LS));
+                    }
+                }
+                default -> throw new IllegalArgumentException("Unknown option: " + key);
+            }
         }
+        return entry.toString();
+    }
 
-        OASClientConfig clientConfig = new OASClientConfig.Builder()
-                .withFilters(new Filter())
-                .withOpenAPI(openAPI)
-                .build();
+    private void validateArguments() throws Exception {
+        if (!arguments.containsKey(KEY_INPUT)) {
+            throw new Exception("Missing required argument: --input <path-to-openapi-contract>");
+        }
+        if (!arguments.containsKey(KEY_TARGET_MODULE)) {
+            throw new Exception("Missing required argument: --module <target-module>");
+        }
+        if (!arguments.containsKey(KEY_ID)) {
+            throw new Exception("Missing required argument: --id <module-id>");
+        }
+    }
+
+    private static String warpWithQuotes(String value) {
+        return "\"" + value + "\"";
+    }
+
+    public Map<String, List<LSPTextEdit>> generate() throws Exception {
+        OASClientConfig clientConfig = createClientConfig();
         TypeHandler.createInstance(clientConfig.getOpenAPI(), clientConfig.isNullable());
         BallerinaClientGenerator balClientGenerator = new BallerinaClientGenerator(clientConfig);
-
-        List<TypeDefinitionNode> authNodes = balClientGenerator.getBallerinaAuthConfigGenerator()
-                .getAuthRelatedTypeDefinitionNodes();
-        for (TypeDefinitionNode authNode : authNodes) {
-            TypeHandler.getInstance().addTypeDefinitionNode(authNode.typeName().text(), authNode);
-        }
 
         String licenceContent = clientConfig.getLicense();
         String licenceHeader = licenceContent == null || licenceContent.isBlank() ? "" : licenceContent + "\n";
 
         List<GenSrcFile> sourceFiles = generateSourceFiles(licenceHeader, balClientGenerator);
-        Path outputPath = this.projectPath.resolve("generated").resolve("weather");
+        Path outputPath = this.projectPath.resolve("generated").resolve(arguments.get(KEY_TARGET_MODULE));
+
+        Map<String, List<LSPTextEdit>> textEditsMap = new HashMap<>();
         for (GenSrcFile sourceFile : sourceFiles) {
             List<LSPTextEdit> textEdits = new ArrayList<>();
             LinePosition position = LinePosition.from(0, 0);
             textEdits.add(LSPTextEdit.from(LineRange.from("", position, position), sourceFile.getContent()));
             textEditsMap.put(outputPath.resolve(sourceFile.getFileName()).toString(), textEdits);
         }
-
+        genBalTomlTableEntry(textEditsMap);
         return textEditsMap;
+    }
+
+    private OASClientConfig createClientConfig() throws Exception {
+        Path contractPath = Path.of(this.arguments.get(KEY_INPUT));
+        OpenAPI openAPI = GeneratorUtils.normalizeOpenAPI(contractPath, false, true, true);
+        if (Objects.isNull(openAPI.getInfo())) {
+            throw new Exception("Info section is missing in the OpenAPI contract: " + contractPath);
+        }
+        OASClientConfig.Builder builder = new OASClientConfig.Builder()
+                .withFilters(new Filter())
+                .withOpenAPI(openAPI);
+        if (this.arguments.containsKey(OPTION_NULLABLE)) {
+            builder.withNullable(true);
+        }
+        return builder.build();
     }
 
     private List<GenSrcFile> generateSourceFiles(String licenceHeader,
@@ -149,6 +227,12 @@ public class SourceGenerator {
         if (!utilSourceContent.isBlank()) {
             sourceFiles.add(new GenSrcFile(GenSrcFile.GenFileType.GEN_SRC, null, UTIL_FILE_NAME,
                     licenceHeader + utilSourceContent));
+        }
+
+        List<TypeDefinitionNode> authNodes = clientGenerator.getBallerinaAuthConfigGenerator()
+                .getAuthRelatedTypeDefinitionNodes();
+        for (TypeDefinitionNode authNode : authNodes) {
+            TypeHandler.getInstance().addTypeDefinitionNode(authNode.typeName().text(), authNode);
         }
 
         SyntaxTree typeSyntaxTree = TypeHandler.getInstance().generateTypeSyntaxTree();
