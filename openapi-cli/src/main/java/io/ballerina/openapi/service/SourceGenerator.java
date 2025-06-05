@@ -1,3 +1,21 @@
+/*
+ *  Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com)
+ *
+ *  WSO2 LLC. licenses this file to you under the Apache License,
+ *  Version 2.0 (the "License"); you may not use this file except
+ *  in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing,
+ *  software distributed under the License is distributed on an
+ *  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ *  KIND, either express or implied.  See the License for the
+ *  specific language governing permissions and limitations
+ *  under the License.
+ */
+
 package io.ballerina.openapi.service;
 
 import io.ballerina.compiler.syntax.tree.SyntaxTree;
@@ -54,13 +72,12 @@ public class SourceGenerator {
     private final Path projectPath;
     private final Map<String, String> arguments;
 
-    public SourceGenerator(String[] arguments, String projectPath) throws Exception {
+    public SourceGenerator(String[] arguments, String projectPath) {
         this.arguments = argumentsParser(new ArrayList<>(Arrays.stream(arguments).toList()));
         this.projectPath = Path.of(projectPath);
-        this.validateArguments();
     }
 
-    private static Map<String, String> argumentsParser(List<String> arguments) {
+    private Map<String, String> argumentsParser(List<String> arguments) {
         Map<String, String> argsMap = new HashMap<>();
         while (!arguments.isEmpty()) {
             String option = arguments.removeFirst();
@@ -177,6 +194,7 @@ public class SourceGenerator {
     }
 
     public Map<String, List<LSPTextEdit>> generate() throws Exception {
+        validateArguments();
         OASClientConfig clientConfig = createClientConfig();
         TypeHandler.createInstance(clientConfig.getOpenAPI(), clientConfig.isNullable());
         BallerinaClientGenerator balClientGenerator = new BallerinaClientGenerator(clientConfig);

@@ -1,3 +1,21 @@
+/*
+ *  Copyright (c) 2025, WSO2 LLC. (http://www.wso2.com)
+ *
+ *  WSO2 LLC. licenses this file to you under the Apache License,
+ *  Version 2.0 (the "License"); you may not use this file except
+ *  in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing,
+ *  software distributed under the License is distributed on an
+ *  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ *  KIND, either express or implied.  See the License for the
+ *  specific language governing permissions and limitations
+ *  under the License.
+ */
+
 package io.ballerina.openapi.service;
 
 import io.ballerina.cli.service.CliToolService;
@@ -42,7 +60,7 @@ public class OpenApiToolService implements CliToolService {
     public List<SubCommand> getAvailableCommands() {
         List<Argument> addCommandArguments = List.of(
                 new Argument("--input", "contractPath", "",
-                        false,"Path to the OpenAPI contract file"),
+                        false, "Path to the OpenAPI contract file"),
                 new Argument("--id", "name",
                         "", false, "Connector name to be generated"),
                 new Argument("--module", "name", "",
@@ -51,7 +69,7 @@ public class OpenApiToolService implements CliToolService {
                         true, "Generate nullable types in the connector")
                 );
         SubCommand subCommand = new SubCommand("openapi", "add",
-                addCommandArguments, ResultType.TEXT_EDIT) ;
+                addCommandArguments, ResultType.TEXT_EDIT);
         return List.of(subCommand);
     }
 
