@@ -2,6 +2,7 @@ package io.ballerina.openapi.service;
 
 import io.ballerina.cli.service.CliToolService;
 import io.ballerina.cli.service.ToolName;
+import io.ballerina.cli.service.types.Argument;
 import io.ballerina.cli.service.types.CommandResponse;
 import io.ballerina.cli.service.types.ResultType;
 import io.ballerina.cli.service.types.Status;
@@ -39,7 +40,19 @@ public class OpenApiToolService implements CliToolService {
 
     @Override
     public List<SubCommand> getAvailableCommands() {
-        return List.of();
+        List<Argument> addCommandArguments = List.of(
+                new Argument("--input", "contractPath", "",
+                        false,"Path to the OpenAPI contract file"),
+                new Argument("--id", "name",
+                        "", false, "Connector name to be generated"),
+                new Argument("--module", "name", "",
+                        false, "Connector module name to be generated"),
+                new Argument("-n", "nullable", "false",
+                        true, "Generate nullable types in the connector")
+                );
+        SubCommand subCommand = new SubCommand("openapi", "add",
+                addCommandArguments, ResultType.TEXT_EDIT) ;
+        return List.of(subCommand);
     }
 
     @Override
